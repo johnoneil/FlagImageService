@@ -24,11 +24,11 @@ import re
 import glob
 import random
 
-class MainHandler(tornado.web.StaticFileHandler):
-  def __init__(self, application, request, **kwargs):
-    tornado.web.StaticFileHandler.__init__(self, application, request, **kwargs)
-    self.flag_database = {}
-    self.flags = glob.glob("/home/joneil/code/flagservice/image/*.gif")
+class TestPage(tornado.web.RequestHandler):
+	def get(self):
+		self.render("test.html")
+
+class FlagRequestHandler(tornado.web.StaticFileHandler):
   def get(self):
     #pull the nick out of our request
     nick = self.get_argument('nick','random', True)
@@ -36,9 +36,25 @@ class MainHandler(tornado.web.StaticFileHandler):
     
     #fetch the flag assigned to this nick
     #if one isn't assigned a random one will be assigned
-    flag = self.get_flag(nick)
+    flag = self.application.get_flag(nick)
     print 'assigned flag is :' + flag
-    return super(MainHandler, self).get(flag, True)   
+    return super(FlagRequestHandler, self).get(flag, True)   
+
+class FlagWebService(tornado.web.Application):
+  def __init__(self):#, handlers=None, default_host='', transforms=None, wsgi=False, **settings):
+    image_path = '/home/joneil/code/flagservice/image'
+    handlers = [
+      (r"/", FlagRequestHandler, {'path': '/home/joneil/code/flagservice/image'}),
+      (r"/test",TestPage),
+    ]
+    settings = dict(
+      image_path=os.path.join(os.path.dirname(__file__), "image"),
+      debug=True,
+    )
+    super(FlagWebService,self).__init__(handlers,**settings)
+    
+    self.flag_database = {}
+    self.flags = glob.glob(image_path +'/*.gif')
 
   def get_flag(self, nick):
     #really, this should be a lookup via sql database, but
@@ -52,19 +68,12 @@ class MainHandler(tornado.web.StaticFileHandler):
       self.flag_database[nick] = random.choice(self.flags)
     #todo: see if it's a valid flag
     return self.flag_database[nick]
- 
-class TestPage(tornado.web.RequestHandler):
-	def get(self):
-		self.render("test.html")   
 
 def main():
-  application = tornado.web.Application([
-      (r"/", MainHandler, {'path': '/home/joneil/code/flagservice/image'}),
-      (r"/test",TestPage),
-      #(r"/image/(.*)", tornado.web.StaticFileHandler, {'path': '/home/joneil/code/flagservice/image'}),
-  ])
+
+  application = FlagWebService()
   application.listen(8880)
-  tornado.ioloop.IOLoop.instance().start() 
+  tornado.ioloop.IOLoop.instance().start()
  
 if __name__ == "__main__":
   main()
