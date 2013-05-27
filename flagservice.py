@@ -13,6 +13,7 @@ import tornado.web
 import tornado.websocket
 import tornado.ioloop
 import tornado.iostream
+import MySQLdb as sql
 import socket
 import string
 import json
@@ -23,6 +24,15 @@ import os
 import re
 import glob
 import random
+import sys
+
+#Set up and parse command line options using Tornado wrappers
+#this is quick, but probably not advisable in the long term
+from tornado.options import define, options
+define("mysql_host", default="127.0.0.1", help="database host")
+define("mysql_database", default="irc", help="database name")
+define("mysql_user", default="ircuser", help="database user")
+define("mysql_password", default="", help="database password")
 
 class TestPage(tornado.web.RequestHandler):
 	def get(self):
@@ -41,39 +51,91 @@ class FlagRequestHandler(tornado.web.StaticFileHandler):
     return super(FlagRequestHandler, self).get(flag, True)   
 
 class FlagWebService(tornado.web.Application):
-  def __init__(self):#, handlers=None, default_host='', transforms=None, wsgi=False, **settings):
-    image_path = '/home/joneil/code/flagservice/image'
+  def __init__(self, image_path):
+
     handlers = [
-      (r"/", FlagRequestHandler, {'path': '/home/joneil/code/flagservice/image'}),
+      (r"/", FlagRequestHandler, {'path': image_path}),
       (r"/test",TestPage),
     ]
     settings = dict(
-      image_path=os.path.join(os.path.dirname(__file__), "image"),
+      image_path=image_path,
       debug=True,
     )
     super(FlagWebService,self).__init__(handlers,**settings)
     
-    self.flag_database = {}
-    self.flags = glob.glob(image_path +'/*.gif')
+    self.flags = glob.glob(settings['image_path'] +'/*.gif')
+    self.database = sql.connect(options.mysql_host, options.mysql_user, 
+      options.mysql_password, options.mysql_database,use_unicode=1,charset="utf8")
+
+    self.CreateTableIfNoneExists()
+
+  def CreateTableIfNoneExists(self):
+    cursor =  self.database.cursor()
+    if cursor is not None:
+      cursor.execute( 'CREATE TABLE IF NOT EXISTS flags \
+      (\
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,\
+        timestamp TIMESTAMP DEFAULT NOW(),\
+        created TIMESTAMP,\
+        nick VARCHAR(4096),\
+        flag VARCHAR(4096)\
+        );')
+      result = cursor.fetchall()
+      cursor.close()
+
+  def ReadFlag(self, nick):
+    cursor = self.database.cursor()
+    if(cursor is not None):
+      query = 'SELECT * FROM flags WHERE nick = \'{0}\''.format(nick)
+      print query
+      rows = cursor.execute(query)
+      result = cursor.fetchone()
+      if result:
+        print result
+        return result[4]
+      cursor.close()
+    return None
+    
+  def WriteFlag(self, nick, flag):
+    cursor = self.database.cursor()
+    if( cursor is not None):
+      sqlcommand = 'INSERT INTO flags(nick, flag)\
+        VALUES (\'{0}\', \'{1}\');'.format(nick, flag)
+      print sqlcommand
+      cursor.execute( sqlcommand )
+      #result = cursor.fetchall()
+      cursor.close()
 
   def get_flag(self, nick):
-    #really, this should be a lookup via sql database, but
-    #I'm not doing that tonight
-    if not nick in self.flag_database:
-      self.set_flag(nick)
-    return self.flag_database[nick]
+    flag = self.ReadFlag(nick)
+    if flag is None:
+      return self.set_flag(nick)
+    else:
+      return flag
 
   def set_flag(self, nick, flag = None):
     if flag is None:
-      self.flag_database[nick] = random.choice(self.flags)
+      flag = random.choice(self.flags)
+      self.WriteFlag(nick, flag)
     #todo: see if it's a valid flag
-    return self.flag_database[nick]
+    return flag
 
 def main():
 
-  application = FlagWebService()
-  application.listen(8880)
-  tornado.ioloop.IOLoop.instance().start()
+  application = None
+  try:
+    tornado.options.parse_command_line()
+
+    application = FlagWebService('/home/joneil/code/FlagImageService/image')
+    application.listen(8880)
+    tornado.ioloop.IOLoop.instance().start()
+  except sql.Error, e:
+    print "Error %d: %s" % (e.args[0], e.args[1])
+    sys.exit(1)
+
+  finally:
+    if application:
+      database.close()
  
 if __name__ == "__main__":
   main()
