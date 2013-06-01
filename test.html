@@ -12,7 +12,15 @@
 <h1>This is a test</h1>
 
 <p>Listing images from flag service</p>
-<img src="http://127.0.0.1:8880/?nick=random" alt="random">
+<img src="http://192.168.1.6:8880/?nick=random" alt="random">
+
+<p>Use the form below to assign a country to a nick.</p>
+<p>The server will try to interpret a country by name or abbreviation.</p>
+<form name="input" method="POST">
+User nick: <input type="text" name="nick"><nl>
+Country: <input type="text" name="country">
+<input type="submit" value="Submit">
+</form> 
 
 </body>
 </html>
