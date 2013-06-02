@@ -14,15 +14,33 @@ Email:
   it's just an experiment).
   it should work as follows:
   1)Request a list of countries (returned as json):
-  http://www.demo.com/flagservice/countries
-  2)Request the country associated with a nick (as json)
-  http://www.demo.com/flagservice/NICK/country
-  3)Request an image of the flag associated with a given nick
-  http://www.demo.com/flagservice/NICK/country/image
-  4)Requst an image of any country's flag
-  http://www.demo.com/flagservice/countries/XX/image (where XX is the ISOv2 country abbreviation)
-  5)Create a nick entry associated with a country, or update a nick's associated country:
-  http://www.demo.com/flagservice/NICK/?country=xx
+  GET http://www.demo.com/flagservice/countries <lists names and isoalpha2 codes in json dict>
+  GET http://www.demo.com/flagservice/countries/names
+  GET http://www.demo.com/flagservice/countries/isoalpha2
+  
+  2)Request a flag image for a country given its isov2 abbreviation
+  GET http://www.demo.com/flagservice/countries/us/image
+
+  3)Request a random iosv2 country name, isov2 abbreviation or flag image
+  GET http://www.demo.com/flagservice/countries/random/name
+  GET http://www.demo.com/flagservice/countries/random/isoalpha2
+  GET http://www.demo.com/flagservice/countries/random/image
+
+  4)Request the country associated with a nick (as json)
+  GET http://www.demo.com/flagservice/nicks/NICK/country/name
+  GET http://www.demo.com/flagservice/nicks/NICK/country/isoalpha2
+
+  5)Request an image of the flag associated with a given nick
+  GET http://www.demo.com/flagservice/nicks/NICK/country/image
+
+  6)Create or update a new user with a nick, country ISOV2 abbreviation and password
+  PUT http://www.demo.com/flagservice/nicks <payload contains json for nick, country and possibly password>
+
+  6)Create a nick entry associated with a country, or update a nick's associated country:
+  PUT http://www.demo.com/flagservice/nicks <payload contains json for nick, country and possibly password>
+
+  8)Delete a nick entry from database
+  DELETE http://www.demo.com/flagservice/nicks <payload contains json for nick, country and possibly password>
 
 """
 #!/usr/bin/python
@@ -95,7 +113,16 @@ class FlagRequestHandler(tornado.web.StaticFileHandler):
 
 class ListCountries(tornado.web.RequestHandler):
   def get(self, **params):
-    countries = {'countries':self.application.flags}
+    self.write(json.dumps(self.application.countries,sort_keys=True, indent=4))
+
+class ListCountryNames(tornado.web.RequestHandler):
+  def get(self, **params):
+    countries = {'countries':self.application.countries.keys() }
+    self.write(json.dumps((countries),sort_keys=True, indent=4))
+
+class ListCountriesisoalpha2(tornado.web.RequestHandler):
+  def get(self, **params):
+    countries = {'isoalpha2':self.application.countries.values() }
     self.write(json.dumps((countries),sort_keys=True, indent=4))
 
 class GetFlagForCountry(tornado.web.StaticFileHandler):
@@ -125,6 +152,10 @@ class SetFlagForNick(tornado.web.RequestHandler):
     nick = params['nick']
     country = params['country']
     self.application.set_flag(nick,country)
+  def post(self, **params):
+    nick = params['nick']
+    country = params['country']
+    self.application.set_flag(nick,country)
       
 
 class FlagWebService(tornado.web.Application):
@@ -132,10 +163,12 @@ class FlagWebService(tornado.web.Application):
 
     handlers = [
       (r'/countries', ListCountries),
-      (r'/countries/?(?P<country>[A-Za-z]{2})?/image',GetFlagForCountry, {'path': image_path}),
-      (r'/nick/?(?P<nick>[A-Za-z0-9-_]+)?/country',GetCountryForNick),
-      (r'/nick/?(?P<nick>[A-Za-z0-9-_]+)?/country/image',GetFlagForNick,{'path': image_path}),
-      (r'/nick/?(?P<nick>[A-Za-z0-9-_]+)?/country/?(?P<country>[A-Za-z]{2})?',SetFlagForNick),
+      (r'/countries/names', ListCountryNames),
+      (r'/countries/isoalpha2', ListCountriesisoalpha2),
+      (r'/countries/?(?P<country>[A-Za-z]+)?/image',GetFlagForCountry, {'path': image_path}),
+      (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/name',GetCountryForNick),
+      (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/image',GetFlagForNick,{'path': image_path}),
+      (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/?(?P<country>[A-Za-z]+)?',SetFlagForNick),
       (r"/", FlagRequestHandler, {'path': image_path}),
       (r"/test",TestPage),
     ]
@@ -146,6 +179,18 @@ class FlagWebService(tornado.web.Application):
     super(FlagWebService,self).__init__(handlers,**settings)
     self.flags = filter(lambda x: x.endswith('.gif'), os.listdir(settings['image_path']))
     self.flags = [ os.path.splitext(e)[0] for e in self.flags ]
+    self.countries = {}
+    for entry in self.flags:
+      #pycountry appears to be weak in the area of key errors
+      try:
+        iso_country = pycountry.countries.get(alpha2=entry.upper())
+      except KeyError, e:
+        self.countries[entry] = entry
+      if(iso_country):
+        self.countries[iso_country.name] = entry
+      else:
+        self.countries[entry] = entry
+      
     #self.flags = [ os.path.splitext(e)[0] for e in glob.glob(settings['image_path'] +'/*.gif')]
     self.database = FlagServiceDatabase.FlagServiceDatabase()
     self.database.CreateTableIfNoneExists()
