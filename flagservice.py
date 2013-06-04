@@ -13,7 +13,7 @@ Email:
   be able to reassign someone's flag (i don't care really,
   it's just an experiment).
   it should work as follows:
-  1)Request a list of countries (returned as json):
+  1)Request a list of countries (returned as ):
   GET http://www.demo.com/flagservice/countries <lists names and isoalpha2 codes in json dict>
   GET http://www.demo.com/flagservice/countries/names
   GET http://www.demo.com/flagservice/countries/isoalpha2
@@ -82,33 +82,6 @@ class TestPage(tornado.web.RequestHandler):
   def get(self):
     self.render("test.html")
 
-class FlagRequestHandler(tornado.web.StaticFileHandler):
-  def get(self):
-    #pull the nick out of our request
-    nick = self.get_argument('nick','random', True)
-    print "nick is :" + nick
-
-    #fetch the flag assigned to this nick
-    #if one isn't assigned a random one will be assigned
-    flag = self.application.get_country(nick)
-    print 'assigned flag is :' + flag
-    return super(FlagRequestHandler, self).get(flag, True)
-  
-
-  def post(self):
-    nick = self.get_argument('nick','random', True)
-    print "nick is :" + nick
-
-    #Pull an optional 'country' argument out of request
-    #if the country argument exists, this is an attempt to set
-    #a nick/country association
-    country = self.get_argument('country',None)
-    if(country):
-      print 'country is ' + country
-      iso_country = pycountry.countries.get(name=country)
-      if(iso_country):
-        print 'country iso name = ' + iso_country.alpha2
-
 class ListCountries(tornado.web.RequestHandler):
   def get(self, **params):
     self.write(json.dumps(self.application.countries,sort_keys=True, indent=4))
@@ -142,7 +115,6 @@ class GetCountryForNick(tornado.web.RequestHandler):
     print nick + ' has assigned country ' + country
     assigned_country = {nick:country}
     self.write(json.dumps(assigned_country,sort_keys=True, indent=4))
-    #self.write(country)
 
 class GetFlagForNick(tornado.web.StaticFileHandler):
   def get(self, **params):
@@ -155,21 +127,14 @@ class GetFlagForNick(tornado.web.StaticFileHandler):
     print nick + ' has assigned flag ' + flag
     return super(GetFlagForNick, self).get('/home/joneil/code/FlagImageService/image/' + flag + '.gif', True)
 
-class SetFlagForNick(tornado.web.RequestHandler):
-  def set(self, **params):
-    nick = params['nick']
-    country = params['country']
-    self.application.set_country(nick,country)
-  def post(self, **params):
-    nick = params['nick']
-    country = params['country']
-    self.application.set_country(nick,country)
-
 class CreateOrUpdateNick(tornado.web.RequestHandler):
   def put(self):
-    nick = self.get_argument('nick', '')
-    country = self.get_argument('country', '')
-    password = self.get_argument('password','')
+    payload = self.request.body
+    j = json.loads(payload)
+    print 
+    nick = j['nick']
+    country = j['country']
+    password = j['password']
     print 'PUT request on ' + nick + ' ' + country + ' ' + password
     self.application.set_country(nick, country, password)
   def delete(self,**params):
@@ -187,9 +152,7 @@ class FlagWebService(tornado.web.Application):
       (r'/countries/?(?P<country>[A-Za-z]+)?/image',GetFlagForCountry, {'path': image_path}),
       (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/name',GetCountryForNick),
       (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/image',GetFlagForNick,{'path': image_path}),
-      #(r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/?(?P<country>[A-Za-z]+)?',SetFlagForNick),
       (r'/nicks',CreateOrUpdateNick),
-      (r"/", FlagRequestHandler, {'path': image_path}),
       (r"/test",TestPage),
     ]
     settings = dict(
@@ -210,8 +173,7 @@ class FlagWebService(tornado.web.Application):
         self.countries[iso_country.name] = entry
       else:
         self.countries[entry] = entry
-      
-    #self.flags = [ os.path.splitext(e)[0] for e in glob.glob(settings['image_path'] +'/*.gif')]
+
     self.database = FlagServiceDatabase.FlagServiceDatabase()
     self.database.CreateTableIfNoneExists()
 

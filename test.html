@@ -6,21 +6,107 @@
 	<meta Http-Equiv="Expires" Content="0">
 	<meta Http-Equiv="Pragma-directive: no-cache">
 	<meta Http-Equiv="Cache-directive: no-cache">
+
+	<title>RESTful IRC Flag Service Web Interface</title>
+
+<script>
+
+</script>
 </head>
 <body>
 
 <h1>This is a test</h1>
 
 <p>Listing images from flag service</p>
-<img src="http://192.168.1.6:8880/?nick=random" alt="random">
+
 
 <p>Use the form below to assign a country to a nick.</p>
 <p>The server will try to interpret a country by name or abbreviation.</p>
-<form name="input" method="POST">
-User nick: <input type="text" name="nick"><nl>
-Country: <input type="text" name="country">
-<input type="submit" value="Submit">
-</form> 
+
+User nick: <input type="text" id="nick"><nl>
+Country: <select id="country" /><nl>
+Password <input type="password" id="password"/><nl>
+<button id="send" type="button">Send</button> 
+
+
+<script type="text/javascript">
+	function LoadListboxFromServer()
+	{
+		var url = 'http://192.168.1.6:8880/countries/names';
+		//var onLoadHandler = function(event)
+		function OnCountryListResponse(data)
+		{
+			var j = JSON.parse(data);
+			var countries = j.countries;
+			for (var i = 0; i < countries.length; i++)
+			{
+				var country_name = countries[i];
+				document.getElementById("country").add(new Option(country_name,country_name));
+			}
+		}
+		/*var onTimeOutHandler = function(event)
+		{
+			var content = document.getElementById('content'),
+			p = document.createElement('p'),
+			msg = document.createTextNode('Just a little bit longer!');
+			p.appendChild(msg);
+			content.appendChild(p);
+
+			// Restarts the request.
+			event.target.open('GET',url);
+
+			// Optionally, set a longer timeout to override the original.
+			event.target.timeout = 6000;
+			event.target.send();
+	  	}*/
+		var xhr = new XMLHttpRequest();
+		xhr.onreadystatechange = function() {
+			if (xhr.readyState === 4){
+				OnCountryListResponse(xhr.responseText);
+			}
+		};
+		xhr.open('GET',url);
+		//xhr.timeout = 3000;
+		//xhr.onload = onLoadHandler;
+		//xhr.ontimeout = onTimeOutHandler;
+		xhr.send();
+	}
+	function AssignNickToCountry(nick, country, password)
+	{
+		//window.alert(nick + country + password);
+		var url = 'http://192.168.1.6:8880/nicks';
+		var data={};
+		data.nick=nick;
+		data.country=country;
+		data.password=password;
+
+		//get right XMLHttpRequest object for current browsrer
+		//var x=ajaxFunction();
+		var mypayload = JSON.stringify(data);
+		var xhr = new XMLHttpRequest();
+		xhr.open('PUT',url);//,true);
+		xhr.setRequestHeader('Content-type','application/json; charset=utf-8');
+		//xhr.setRequestHeader("Content-length", string.length);
+		xhr.send(mypayload);
+
+	}
+	function OnSend(event)
+	{
+		//get the info, validate it and send a 'PUT' http request to the server
+		var nick = document.getElementById('nick').value
+		var country_list = document.getElementById('country');
+		var country = country_list.options[country_list.selectedIndex].value;
+		var password = document.getElementById('password').value
+		if( nick && country )
+		{
+			AssignNickToCountry(nick,country,password);	
+		}
+	}
+
+	//window.addEventListener('DOMContentLoaded', LoadListboxFromServer, false);
+	window.onload=LoadListboxFromServer;
+	document.getElementById("send").onclick=OnSend;
+</script> 
 
 </body>
 </html>
