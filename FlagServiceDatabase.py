@@ -21,6 +21,8 @@ define("mysql_database", default="irc", help="database name")
 define("mysql_user", default="ircuser", help="database user")
 define("mysql_password", default="", help="database password")
 
+IRCUserDataTableName = 'UserData'
+
 
 class FlagServiceDatabase:
   def __init__(self):
@@ -31,14 +33,14 @@ class FlagServiceDatabase:
   def CreateTableIfNoneExists(self):
     cursor =  self.database.cursor()
     if cursor is not None:
-      cursor.execute( 'CREATE TABLE IF NOT EXISTS flags \
+      cursor.execute( 'CREATE TABLE IF NOT EXISTS UserData \
       (\
-        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,\
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY UNIQUE,\
         timestamp TIMESTAMP DEFAULT NOW(),\
         created TIMESTAMP,\
-        nick VARCHAR(4096),\
-        country VARCHAR(4096),\
-        password VARCHAR(4096)\
+        nick VARCHAR(255) UNIQUE NOT NULL,\
+        country VARCHAR(255) NOT NULL,\
+        password VARCHAR(255)\
         );')
       result = cursor.fetchall()
       cursor.close()
@@ -46,7 +48,7 @@ class FlagServiceDatabase:
   def ReadCountry(self, nick):
     cursor = self.database.cursor()
     if(cursor is not None):
-      query = 'SELECT * FROM flags WHERE nick = \'{0}\''.format(nick)
+      query = 'SELECT * FROM UserData WHERE nick = \'{0}\''.format(nick)
       print query
       rows = cursor.execute(query)
       result = cursor.fetchone()
@@ -57,14 +59,27 @@ class FlagServiceDatabase:
     return None
     
   def WriteCountry(self, nick, country, password=''):
+    #TODO: check password
     cursor = self.database.cursor()
     if( cursor is not None):
-      sqlcommand = 'INSERT INTO flags(nick, country, password)\
-        VALUES (\'{0}\', \'{1}\',\'{2}\');'.format(nick, country, password)
+      sqlcommand = 'UPDATE UserData SET country=\'{0}\',password=\'{1}\'\
+        WHERE nick=\'{2}\';'.format(country, password, nick)
       print sqlcommand
-      cursor.execute( sqlcommand )
-      #result = cursor.fetchall()
+      r = cursor.execute( sqlcommand )
+      if(r == 0):#no value updated above, insert a new entry
+        sqlcommand = 'INSERT INTO UserData(nick, country, password)\
+        VALUES (\'{0}\', \'{1}\',\'{2}\');'.format(nick, country, password)
+        print sqlcommand
+        cursor.execute( sqlcommand )
+        #result = cursor.fetchall()
       cursor.close()
+
+  def DeleteNickEntry(self, nick, password=''):
+    #TODO: chekc password
+    cursor = self.database.cursor()
+    if cursor is not None:
+      query = "delete from UserData where nick = '%s' " % nick
+      cursor.execute(query)
 
   def close(self):
     if(self.database):

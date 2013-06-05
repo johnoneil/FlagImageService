@@ -34,9 +34,6 @@ Email:
   6)Create or update a new user with a nick, country ISOV2 abbreviation and password
   PUT http://www.demo.com/flagservice/nicks <payload contains json for nick, country and possibly password>
 
-  6)Create a nick entry associated with a country, or update a nick's associated country:
-  PUT http://www.demo.com/flagservice/nicks <payload contains json for nick, country and possibly password>
-
   8)Delete a nick entry from database
   DELETE http://www.demo.com/flagservice/nicks <payload contains json for nick, country and possibly password>
 
@@ -64,21 +61,6 @@ import pycountry
 
 
 class TestPage(tornado.web.RequestHandler):
-  def post(self):
-    # nick = self.get_argument('nick','random', True)
-    # print "nick is :" + nick
-
-    #Pull an optional 'country' argument out of request
-    #if the country argument exists, this is an attempt to set
-    #a nick/country association
-    #country = self.get_argument('country',None)
-    #if(country):
-    #  print 'country is ' + country
-    #  iso_country = pycountry.countries.get(name=country)
-    #  if(iso_country):
-    #    print 'country iso name = ' + iso_country.alpha2
-    self.render("test.html")
-
   def get(self):
     self.render("test.html")
 
@@ -129,16 +111,21 @@ class GetFlagForNick(tornado.web.StaticFileHandler):
 
 class CreateOrUpdateNick(tornado.web.RequestHandler):
   def put(self):
+    (nick, country, password) = self.GetPayload()
+    self.application.set_country(nick, country, password)
+  def delete(self):
     payload = self.request.body
     j = json.loads(payload)
-    print 
+    nick = j['nick']
+    password = j['password']
+    self.application.RemoveNickEntry(nick,password)
+  def GetPayload(self):
+    payload = self.request.body
+    j = json.loads(payload)
     nick = j['nick']
     country = j['country']
     password = j['password']
-    print 'PUT request on ' + nick + ' ' + country + ' ' + password
-    self.application.set_country(nick, country, password)
-  def delete(self,**params):
-    pass
+    return (nick, country, password)
       
 
 class FlagWebService(tornado.web.Application):
@@ -188,6 +175,9 @@ class FlagWebService(tornado.web.Application):
     self.database.WriteCountry(nick, country, password)
     #todo: see if it's a valid flag
     return country
+
+  def RemoveNickEntry(self,nick,password=''):
+    self.database.DeleteNickEntry(nick, password)
 
 def main():
 
