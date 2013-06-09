@@ -8,10 +8,8 @@ Email:
 
   This is an attempt at a simple RESTful api
   to provide little flags for IRC users (just associate
-  countries and flag images with irc nicks). I'm not
-  building in security (no passwords) so anyone should
-  be able to reassign someone's flag (i don't care really,
-  it's just an experiment).
+  countries and flag images with irc nicks).
+  Just added basic password support, so chan
   it should work as follows:
   1)Request a list of countries (returned as ):
   GET http://www.demo.com/flagservice/countries <lists names and isoalpha2 codes in json dict>
