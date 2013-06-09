@@ -57,6 +57,13 @@ import sys
 import FlagServiceDatabase
 import pycountry
 
+#tornado command line options support
+from tornado.options import define, options
+define('port', default=8888)
+define('images_dir',default='./images')
+define('random_flag_for_unknown_user',default=True)
+define('unknown_user_flag',default='fag')
+
 
 class TestPage(tornado.web.RequestHandler):
   def get(self):
@@ -100,23 +107,28 @@ class GetFlagForNick(tornado.web.StaticFileHandler):
   def get(self, **params):
     nick = params['nick']
     country = self.application.get_country(nick)
-    if country:
-      flag = self.application.countries[country]
-    else:
-      flag = 'fag'
+    flag = self.application.countries[country]
     print nick + ' has assigned flag ' + flag
-    return super(GetFlagForNick, self).get('/home/joneil/code/FlagImageService/image/' + flag + '.gif', True)
+    return super(GetFlagForNick, self).get(options.images_dir + flag + '.gif', True)
 
 class CreateOrUpdateNick(tornado.web.RequestHandler):
   def put(self):
     (nick, country, password) = self.GetPayload()
-    self.application.set_country(nick, country, password)
+    if self.application.set_country(nick, country, password) == True:
+      return
+    self.clear()
+    self.set_status(401)
+    self.finish("<html><body>Incorrect Password Error</body></html>")
   def delete(self):
     payload = self.request.body
     j = json.loads(payload)
     nick = j['nick']
     password = j['password']
-    self.application.RemoveNickEntry(nick,password)
+    if self.application.RemoveNickEntry(nick,password) == True:
+      return
+    self.clear()
+    self.set_status(401)
+    self.finish("<html><body>Incorrect Password Error</body></html>")
   def GetPayload(self):
     payload = self.request.body
     j = json.loads(payload)
@@ -136,7 +148,7 @@ class FlagWebService(tornado.web.Application):
       (r'/countries/random', RandomCountry),
       (r'/countries/?(?P<country>[A-Za-z]+)?/image',GetFlagForCountry, {'path': image_path}),
       (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/name',GetCountryForNick),
-      (r'/nicks/?(?P<nick>[A-Za-z0-9-_]+)?/country/image',GetFlagForNick,{'path': image_path}),
+      (r'/nicks/?(?P<nick>[A-Za-z0-9-_\\\[\]\{\}%^`|]+)?/country/image',GetFlagForNick,{'path': image_path}),
       (r'/nicks',CreateOrUpdateNick),
       (r"/test",TestPage),
     ]
@@ -165,17 +177,20 @@ class FlagWebService(tornado.web.Application):
   def get_country(self, nick):
     country = self.database.ReadCountry(nick)
     if country == None:
-      return 'fag'
+      if options.random_flag_for_unknown_user:
+        random_country = random.choice(self.countries.keys())
+        self.set_country(nick,random_country)
+        return random_country
+      else:
+        return options.unknown_user_flag
     else:
       return country
 
   def set_country(self, nick, country, password=''):
-    self.database.WriteCountry(nick, country, password)
-    #todo: see if it's a valid flag
-    return country
+    return self.database.WriteCountry(nick, country, password)
 
   def RemoveNickEntry(self,nick,password=''):
-    self.database.DeleteNickEntry(nick, password)
+    return self.database.DeleteNickEntry(nick, password)
 
 def main():
 
@@ -183,8 +198,8 @@ def main():
   try:
     tornado.options.parse_command_line()
 
-    application = FlagWebService('/home/joneil/code/FlagImageService/image')
-    application.listen(8880)
+    application = FlagWebService(options.images_dir)
+    application.listen(options.port)
     tornado.ioloop.IOLoop.instance().start()
   except sql.Error, e:
     print "Error %d: %s" % (e.args[0], e.args[1])
